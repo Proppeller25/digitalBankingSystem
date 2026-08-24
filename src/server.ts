@@ -1,10 +1,19 @@
-const express = require("express")
+import express from "express"
 const app = express()
 require('dotenv').config()
+import cookieParser from 'cookie-parser'
+
 
 const connectDb = require('./config/databaseConfig')
 
 const PORT = process.env.PORT || 3000
+
+app.use(express.json())
+app.use(cookieParser())
+
+app.get('/', (req, res) => {
+  res.send('Welcome to the Digital Banking System API')
+})
 
 app.listen(PORT, async () => {
   await connectDb()
