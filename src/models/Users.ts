@@ -39,8 +39,7 @@ const userSchema = new mongoose.Schema(
     password: {
       type: String,
       required: true,
-      minlength: 8,
-      select: false // 
+      minlength: 8
     },
 
     // Verification
@@ -60,6 +59,11 @@ const userSchema = new mongoose.Schema(
       sparse: true // allows null but enforces uniqueness when present
     },
 
+    accountNumber: {
+      type: String,
+      unique: true,
+      required: true
+    },
     // Security
     transactionPin: {
       type: String,
@@ -79,7 +83,6 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     }
-
   },
   {
     timestamps: true

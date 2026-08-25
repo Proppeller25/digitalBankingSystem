@@ -66,11 +66,14 @@ const insertBvn = async (payload: BVN) => {
   }
 }
 
-const validateBvn = async () => {
+const validateBvn = async (bvn:string) => {
   try {
     const token = await getToken()
-    const response = await axios.get(
+    const response = await axios.post(
       `${baseUrl}/api/validateBvn `,
+      {
+        bvn
+      },
       {
         headers:{
           Authorization: `Bearer ${token}`
@@ -176,7 +179,7 @@ const transfer = async (payload: Transfer) => {
   }
 }
 
-const getTransferStatus = async (transactionId:string) => {
+const getTransferStatus = async (transactionId?: string) => {
   try {
     const token = await getToken()
     const response = await axios.get(
