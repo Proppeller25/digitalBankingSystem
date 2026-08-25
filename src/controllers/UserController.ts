@@ -7,24 +7,14 @@ import type { Request, Response } from "express";
 
 import { createNibssAccount, accountEnquiry, getAllAccounts, getAccountBalance, transfer, insertBvn, getTransferStatus, validateBvn } from '../services/nibbsService.js'
 
+const getErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : 'Internal server error'
+
 const generateBVN = () => {
   return Math.floor(10000000000 + Math.random() * 90000000000).toString()
 }
 
-interface AuthenticatedUser {
-  role: string
-  id: string
-  accountNumber: string
-  hasAdminAccess: boolean
-  bvn: string
-  transactionPin: string
-}
-
-interface AuthenticatedRequest extends Request {
-  user: AuthenticatedUser
-}
-
-const createAccount = async (req: AuthenticatedRequest, res: Response) => {
+const createAccount = async (req: Request, res: Response) => {
   try {
     const {
       firstName, 
@@ -36,12 +26,12 @@ const createAccount = async (req: AuthenticatedRequest, res: Response) => {
       transactionPin
     } = req.body
 
+    if(!firstName || !lastName || !dateOfBirth || !email || !phone || !password || !transactionPin)
+      return res.status(400).json({message: 'Missing or wrong parameters'})
+
     const bvn = generateBVN()
     const salt = await bcrypt.genSalt(10)
     const hashedPin = await bcrypt.hash(transactionPin, salt)
-
-    if(!firstName || !lastName || !dateOfBirth || !email || !phone || !password || !transactionPin)
-      return res.status(400).json({message: 'Missing or wrong parameters'})
     
     
     const bvnRes = await insertBvn(
@@ -67,6 +57,9 @@ const createAccount = async (req: AuthenticatedRequest, res: Response) => {
       }
     )
 
+    if (!accountRes.account?.accountNumber)
+      return res.status(502).json({message: 'Unable to create NIBSS account', accountRes})
+
     const newRecord = {
       firstName, 
       lastName, 
@@ -75,14 +68,14 @@ const createAccount = async (req: AuthenticatedRequest, res: Response) => {
       phone,
       password,
       bvn,
-      accountNumber: accountRes.accountNumber, 
+      accountNumber: accountRes.account?.accountNumber, 
       transactionPin: hashedPin
     }
 
     const newUser = await User.create(newRecord)
 
     const status: 'verified' | 'pending' =
-    bvnRes.message.includes('successfully')
+    bvnRes.message?.includes('successfully')
     ? 'verified'
     : 'pending';
 
@@ -109,7 +102,7 @@ const createAccount = async (req: AuthenticatedRequest, res: Response) => {
     })
 
   } catch (error) {
-    res.status(500).json({message: 'Internal server error'})
+    res.status(500).json({message: getErrorMessage(error)})
   }
 }
 
@@ -140,7 +133,7 @@ const userLogin = async (req: Request, res: Response) => {
     const secretKey: string = secret
 
     // ✅ Define options with explicit type
-    const expiresIn = process.env.JWT_EXPIRES_IN || '1h'
+    const expiresIn: any = process.env.JWT_EXPIRES_IN || '1h'
     const options: jwt.SignOptions = { expiresIn }
 
     // Payload – never include sensitive data like transactionPin or bvn
@@ -171,9 +164,29 @@ const userLogin = async (req: Request, res: Response) => {
   }
 }
 
-const getAccounts = async (req: AuthenticatedRequest, res: Response) => {
+const userLogOut = async (_req: Request, res: Response) => {
+  try {
+    res.clearCookie('Authorization', {
+      httpOnly: false,
+      secure: false,
+      sameSite: 'lax',
+      path: '/',
+    })
+    res.setHeader('Authorization', '')
+    res.setHeader('x-auth-token', '')
+    res.status(200).json({message: 'Logout successful'})
+  } catch (error) {
+    console.error('userLogOut error:', error)
+    res.status(500).json({message: 'Internal server error'})
+  }
+}
+
+const getAccounts = async (req: Request, res: Response) => {
   try {
     const user = req.user
+
+    if (!user)
+      return res.status(401).json({message: 'Unauthenticated'})
 
     if(!user.hasAdminAccess)
       return res.status(401).json({message: 'insufficient permissions'})
@@ -185,10 +198,23 @@ const getAccounts = async (req: AuthenticatedRequest, res: Response) => {
   }
 }
 
-const transferMoney = async (req: AuthenticatedRequest, res: Response) => {
+const transferMoney = async (req: Request, res: Response) => {
   try {
     const {user} = req
+
+    if (!user)
+      return res.status(401).json({message: 'Unauthenticated'})
+
     const {to, amount, currency, transactionPin} = req.body
+
+    if (
+      typeof to !== 'string' ||
+      typeof amount !== 'number' ||
+      !Number.isFinite(amount) ||
+      typeof transactionPin !== 'string'
+    ) {
+      return res.status(400).json({message: 'Invalid transfer parameters'})
+    }
 
     const from = user.accountNumber
 
@@ -199,7 +225,12 @@ const transferMoney = async (req: AuthenticatedRequest, res: Response) => {
 
     const accountBalance = await getAccountBalance(from)
 
-    const isValidPin = await bcrypt.compare(transactionPin, user.transactionPin)
+    const userRecord = await User.findById(user.id).select('+transactionPin')
+
+    if (!userRecord?.transactionPin)
+      return res.status(401).json({message: 'Transaction PIN is not configured'})
+
+    const isValidPin = await bcrypt.compare(transactionPin, userRecord.transactionPin)
 
     
     if(accountBalance.balance < amount)
@@ -233,13 +264,17 @@ const transferMoney = async (req: AuthenticatedRequest, res: Response) => {
 
     res.status(200).json({message: 'Transfer successful', transfer: transferRes})
   } catch (error) {
-    res.status(500).json({message: error || 'Internal server error'})
+    res.status(500).json({message: getErrorMessage(error)})
   }
 }
 
-const getTransactionStatus = async (req: AuthenticatedRequest, res: Response) => {
+const getTransactionStatus = async (req: Request, res: Response) => {
   try {
     const {user} = req
+
+    if (!user)
+      return res.status(401).json({message: 'Unauthenticated'})
+
     const {transactionId} = req.params 
     
     if(!transactionId)
@@ -248,6 +283,9 @@ const getTransactionStatus = async (req: AuthenticatedRequest, res: Response) =>
     const normalizedTransactionId = Array.isArray(transactionId)
       ? transactionId[0]
       : transactionId
+
+    if (!normalizedTransactionId)
+      return res.status(400).json({message: 'Transaction ID is required'})
 
     const transaction = await getTransferStatus(normalizedTransactionId)
     const type: 'credit' | 'debit' = 
@@ -272,8 +310,27 @@ const getTransactionStatus = async (req: AuthenticatedRequest, res: Response) =>
 
     res.status(200).json({message: 'Transaction status retrieved', transaction})
   } catch (error) {
-    res.status(500).json({message: error || 'Internal server error'})
+    res.status(500).json({message: getErrorMessage(error)})
   }
 }
 
-export {createAccount, getAccounts, transferMoney, getTransactionStatus}
+const checkBalance = async (req: Request, res: Response) => {
+  try {
+    const { user } = req
+
+    if (!user) {
+      return res.status(401).json({ message: 'Unauthenticated' })
+    }
+
+    const accountBalance = await getAccountBalance(user.accountNumber)
+
+    return res.status(200).json({
+      message: 'Account query successful',
+      accountBalance
+    })
+  } catch (error) {
+    res.status(500).json({ message: getErrorMessage(error) })
+  }
+}
+
+export {createAccount, getAccounts, transferMoney, getTransactionStatus, userLogOut, userLogin, checkBalance}

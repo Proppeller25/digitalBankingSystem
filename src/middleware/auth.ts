@@ -1,15 +1,7 @@
-const jwt = require('jsonwebtoken')
-import type { NextFunction, Request, Response } from "express";
+import jwt from 'jsonwebtoken'
+import type { NextFunction, Request, Response } from "express"
 
-interface AuthenticatedUser {
-  role: string;
-}
-
-interface AuthenticatedRequest extends Request {
-  user: AuthenticatedUser;
-}
-
-const auth = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+ const auth = (req: Request, res: Response, next: NextFunction) => {
   let token = req.cookies?.Authorization
 
   if (!token) {
@@ -17,14 +9,31 @@ const auth = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   }
 
   try {
-    const user = jwt.verify(token, process.env.JWT_SECRET)
+    const jwtSecret = process.env.JWT_SECRET
+
+    if(!jwtSecret)
+      throw new Error('missing required env')
+
+    const user = jwt.verify(token, jwtSecret )
     if (!user) 
       return res.status(401).json({message: 'Access denied. Invalid credentials'})
-    req.user = user
+
+    if (typeof user === 'string') {
+  return res.status(401).json({ message: 'Invalid token payload' })
+}
+
+req.user = {
+  id: String(user.id),
+  email: String(user.email),
+  accountNumber: String(user.accountNumber),
+  hasAdminAccess: Boolean(user.hasAdminAccess),
+  name: String(user.name),
+  ...(typeof user.role === 'string' ? { role: user.role } : {})
+}
     return next()
   } catch (error) {
     return res.status(401).json({ status: 'error', message: 'Token is not valid' })
   }
 }
 
-module.exports = auth
+export default auth
