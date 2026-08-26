@@ -75,11 +75,13 @@ export interface AccountBalanceResponse {
 
 export interface TransferResponse {
   status: string
-  transactionId: string
+  reference: string
   amount: number
   from: string
   to: string
   currency?: string
+  senderAccount: string
+  receiverAccount: string
 }
 
 export type ValidateBvnResponse = boolean | {
@@ -161,7 +163,7 @@ const accountEnquiry = async (accountNumber: string) => {
   try {
     const token = await getToken()
     const response = await axios.get<AccountEnquiryResponse>(
-      `${getBaseUrl()}/api/account/nameenquiry/${encodeURIComponent(accountNumber)}`,
+      `${getBaseUrl()}/api/account/name-enquiry/${encodeURIComponent(accountNumber)}`,
       { headers: { Authorization: `Bearer ${token}` } }
     )
 

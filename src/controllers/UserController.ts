@@ -256,9 +256,12 @@ const transferMoney = async (req: Request, res: Response) => {
       to,
       currency,
       type,
-      status: transferRes.status,
-      referenceId: transferRes.transactionId
+      status: transferRes.status.toLowerCase(),
+      referenceId: transferRes.reference
     }
+
+    if(!transferRes.reference)
+      return res.status(502).json({message: 'Transaction failed', transferRes})
 
     await Transaction.create(transactionRecord)
 
@@ -292,23 +295,32 @@ const getTransactionStatus = async (req: Request, res: Response) => {
     user.accountNumber === transaction.from
     ? 'debit'
     : 'credit'
+
+    const isExistingTransaction = await Transaction.findOne({ referenceId: transactionId })
     
-    if(transaction.status === 'success'){
+    if(transaction.status.toLowerCase() === 'success' && isExistingTransaction) 
+      return res.status(409).json({message: 'This transaction is in record already'})
+
+    
       const transactionRecord = {
         user: user.id,
         amount: transaction.amount,
-        from: transaction.from,
-        to: transaction.to,
+        from: transaction.senderAccount,
+        to: transaction.receiverAccount,
         currency: transaction.currency || 'naira',
         type,
-        status: transaction.status,
-        referenceId: transaction.transactionId
+        status: transaction.status.toLowerCase(),
+        referenceId: transaction.reference
       }
-      
-      await Transaction.create(transactionRecord)
-    }
 
-    res.status(200).json({message: 'Transaction status retrieved', transaction})
+      if (!isExistingTransaction) {
+        await Transaction.create(transactionRecord)
+        res.status(200).json({message: 'Transaction status retrieved and saved', transaction})
+      } else if(isExistingTransaction.status !== 'success' && transaction.status.toLowerCase() === 'success') {
+         isExistingTransaction.status = 'success'
+         await isExistingTransaction.save()
+         res.status(200).json({message: 'Transaction status retrieved and updated', transaction})
+      }
   } catch (error) {
     res.status(500).json({message: getErrorMessage(error)})
   }
