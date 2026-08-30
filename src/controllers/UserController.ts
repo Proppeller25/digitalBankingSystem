@@ -24,16 +24,17 @@ const insertBVN = async (req: Request, res: Response) => {
     } = req.body
 
     if (!firstName || !lastName || !dateOfBirth || !phone) {
-      return res.status(400).json({ message: 'Missing or wrong BVN parameters' })
+      return res.status(400).json({ message: 'Missing required parameters' })
     }
 
-    const normalizedBvn = String(generateBVN)
+    const normalizedBvn = String(generateBVN())
 
     if (!/^\d{11}$/.test(normalizedBvn)) {
       return res.status(400).json({ message: 'BVN must be exactly 11 digits' })
     }
 
     const existingBvn = await Bvn.findOne({ bvn: normalizedBvn })
+    
     if (existingBvn) {
       return res.status(409).json({ message: 'BVN already exists' })
     }
@@ -179,7 +180,7 @@ const userLogin = async (req: Request, res: Response) => {
       email: existingUser.email,
       name: existingUser.firstName,
       accountNumber: existingUser.accountNumber,
-      hasAdminAccess: existingUser.hasAdminAccess || false,
+      hasAdminAccess: existingUser.hasAdminAccess || false
     }
 
     const token = jwt.sign(payload, secretKey, options)
