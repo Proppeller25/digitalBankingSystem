@@ -67,6 +67,7 @@ export interface CreateAccountResponse {
 
 export interface AccountEnquiryResponse {
   accountNumber?: string
+  accountName?: string
 }
 
 export interface AccountBalanceResponse {

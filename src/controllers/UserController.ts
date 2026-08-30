@@ -14,75 +14,43 @@ const generateBVN = () => {
   return Math.floor(10000000000 + Math.random() * 90000000000).toString()
 }
 
-const createAccount = async (req: Request, res: Response) => {
+const insertBVN = async (req: Request, res: Response) => {
   try {
     const {
-      firstName, 
-      lastName, 
-      dateOfBirth, 
-      email,
-      phone,
-      password,
-      transactionPin
+      firstName,
+      lastName,
+      dateOfBirth,
+      phone
     } = req.body
 
-    if(!firstName || !lastName || !dateOfBirth || !email || !phone || !password || !transactionPin)
-      return res.status(400).json({message: 'Missing or wrong parameters'})
-
-    const bvn = generateBVN()
-    const salt = await bcrypt.genSalt(10)
-    const hashedPin = await bcrypt.hash(transactionPin, salt)
-    
-    
-    const bvnRes = await insertBvn(
-      {
-        bvn, 
-        firstName,
-        lastName,
-        dob:dateOfBirth,
-        phone
-      }
-    )
-
-    const isValidBvn = await validateBvn(bvn)
-
-    if(!isValidBvn) 
-      return res.status(404).json({message: 'invalid BVN'})
-    
-    const accountRes = await createNibssAccount(
-      {
-        kycType: 'bvn',
-        kycID: bvn,
-        dob: dateOfBirth
-      }
-    )
-
-    if (!accountRes.account?.accountNumber)
-      return res.status(502).json({message: 'Unable to create NIBSS account', accountRes})
-
-    const newRecord = {
-      firstName, 
-      lastName, 
-      dateOfBirth, 
-      email,
-      phone,
-      password,
-      bvn,
-      accountNumber: accountRes.account?.accountNumber, 
-      transactionPin: hashedPin
+    if (!firstName || !lastName || !dateOfBirth || !phone) {
+      return res.status(400).json({ message: 'Missing or wrong BVN parameters' })
     }
 
-    const newUser = await User.create(newRecord)
+    const normalizedBvn = String(generateBVN)
+
+    if (!/^\d{11}$/.test(normalizedBvn)) {
+      return res.status(400).json({ message: 'BVN must be exactly 11 digits' })
+    }
+
+    const existingBvn = await Bvn.findOne({ bvn: normalizedBvn })
+    if (existingBvn) {
+      return res.status(409).json({ message: 'BVN already exists' })
+    }
+
+    const bvnRes = await insertBvn({
+      bvn: normalizedBvn,
+      firstName,
+      lastName,
+      dob: dateOfBirth,
+      phone
+    })
 
     const status: 'verified' | 'pending' =
-    bvnRes.message?.includes('successfully')
-    ? 'verified'
-    : 'pending';
+      bvnRes.message?.includes('successfully') ? 'verified' : 'pending'
 
-    
     const newBvnRecord = {
-      user: newUser._id,
-      bvn: bvnRes.bvn || bvn,
+      bvn: bvnRes.bvn || normalizedBvn,
       firstName,
       lastName,
       dob: dateOfBirth,
@@ -91,18 +59,87 @@ const createAccount = async (req: Request, res: Response) => {
       provider: 'nibss',
       rawResponse: bvnRes
     }
-      
+
     const newBvn = await Bvn.create(newBvnRecord)
+
+    res.status(201).json({
+      message: 'BVN inserted successfully. Proceed to account creation.',
+      bvn: newBvn
+    })
+  } catch (error) {
+    res.status(500).json({ message: getErrorMessage(error) })
+  }
+}
+
+const createAccount = async (req: Request, res: Response) => {
+  try {
+    const {
+      firstName,
+      lastName,
+      dateOfBirth,
+      email,
+      phone,
+      password,
+      transactionPin,
+      bvn
+    } = req.body
+
+    if (!firstName || !lastName || !dateOfBirth || !email || !phone || !password || !transactionPin || !bvn) {
+      return res.status(400).json({ message: 'Missing or wrong parameters' })
+    }
+
+    const normalizedBvn = String(bvn)
+    const existingBvn = await Bvn.findOne({ bvn: normalizedBvn })
+
+    if (!existingBvn) {
+      return res.status(400).json({ message: 'BVN not found. Please insert BVN before creating an account.' })
+    }
+
+    const isValidBvn = await validateBvn(normalizedBvn)
+
+    if (!isValidBvn) {
+      return res.status(404).json({ message: 'invalid BVN' })
+    }
+
+    const salt = await bcrypt.genSalt(10)
+    const hashedPin = await bcrypt.hash(transactionPin, salt)
+
+    const accountRes = await createNibssAccount({
+      kycType: 'bvn',
+      kycID: normalizedBvn,
+      dob: dateOfBirth
+    })
+
+    if (!accountRes.account?.accountNumber) {
+      return res.status(502).json({ message: 'Unable to create NIBSS account', accountRes })
+    }
+
+    const newRecord = {
+      firstName,
+      lastName,
+      dateOfBirth,
+      email,
+      phone,
+      password,
+      bvn: normalizedBvn,
+      accountNumber: accountRes.account?.accountNumber,
+      transactionPin: hashedPin
+    }
+
+    const newUser = await User.create(newRecord)
+
+    existingBvn.user = newUser._id
+    existingBvn.status = 'verified'
+    await existingBvn.save()
 
     res.status(201).json({
       message: 'User Account created successfully',
       user: newUser,
-      bvn: newBvn,
+      bvn: existingBvn,
       AccountDetails: accountRes
     })
-
   } catch (error) {
-    res.status(500).json({message: getErrorMessage(error)})
+    res.status(500).json({ message: getErrorMessage(error) })
   }
 }
 
@@ -121,7 +158,7 @@ const userLogin = async (req: Request, res: Response) => {
 
     const isValidPassword = await bcrypt.compare(password, existingUser.password)
     if (!isValidPassword) {
-      return res.status(401).json({ message: 'Invalid password' })
+      return res.status(401).json({ message: 'Invalid credentials' })
     }
 
     const secret = process.env.JWT_SECRET
@@ -247,7 +284,7 @@ const transferMoney = async (req: Request, res: Response) => {
       }
     )
 
-    const type: 'credit' | 'debit' = 'credit'
+    const type: 'credit' | 'debit' = 'debit'
 
     const transactionRecord = {
       user: user.id,
@@ -265,7 +302,7 @@ const transferMoney = async (req: Request, res: Response) => {
 
     await Transaction.create(transactionRecord)
 
-    res.status(200).json({message: 'Transfer successful', transfer: transferRes})
+    res.status(200).json({message: `Transfer to ${isValidAccount.accountName} successful`, transfer: transferRes})
   } catch (error) {
     res.status(500).json({message: getErrorMessage(error)})
   }
@@ -345,4 +382,4 @@ const checkBalance = async (req: Request, res: Response) => {
   }
 }
 
-export {createAccount, getAccounts, transferMoney, getTransactionStatus, userLogOut, userLogin, checkBalance}
+export {createAccount, getAccounts, transferMoney, getTransactionStatus, userLogOut, userLogin, checkBalance, insertBVN}
