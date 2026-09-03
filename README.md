@@ -91,7 +91,7 @@ The `GET /api/account` endpoint returns all accounts from NIBSS, but it is restr
 
 ## API Base
 
-- Local development: `http://localhost:3000`
+- Local development: `http://localhost:8000`
 - Root health message: `GET /`
 - API prefix: `/api`
 
@@ -100,7 +100,7 @@ The `GET /api/account` endpoint returns all accounts from NIBSS, but it is restr
 Create a `.env` file in the project root with the following variables:
 
 ```env
-PORT=3000
+PORT=8000
 MONGO_URI=mongodb://localhost:27017/digitalBankingSystem
 JWT_SECRET=your_jwt_secret
 JWT_EXPIRES_IN=1h
@@ -111,7 +111,7 @@ NIBSS_API_SECRET=your_nibss_api_secret
 
 ### Variable Notes
 
-- `PORT`: Server port. Defaults to `3000` if omitted.
+- `PORT`: Server port. Defaults to `8000` if omitted.
 - `MONGO_URI`: MongoDB connection string.
 - `JWT_SECRET`: Secret used to sign and verify access tokens.
 - `JWT_EXPIRES_IN`: JWT lifetime. Defaults to `1h` if omitted.

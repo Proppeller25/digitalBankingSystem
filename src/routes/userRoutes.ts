@@ -1,6 +1,6 @@
 import express from "express";
 import auth from '../middleware/auth.js'
-import {createAccount, getAccounts, transferMoney, getTransactionStatus, userLogOut, userLogin, checkBalance} from '../controllers/UserController.js' 
+import {createAccount, getAccounts, transferMoney, getTransactionStatus, userLogOut, userLogin, checkBalance, getTransactions} from '../controllers/UserController.js' 
 
 const router = express.Router()
 
@@ -12,5 +12,6 @@ router.post('/login', userLogin)
 router.post('/logout', auth, userLogOut)
 router.get('/account/balance', auth, checkBalance)
 router.get('/transaction/:transactionId', auth, getTransactionStatus)
+router.get('/transactions', auth, getTransactions)
 
 export default router

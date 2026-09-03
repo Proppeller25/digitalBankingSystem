@@ -383,4 +383,26 @@ const checkBalance = async (req: Request, res: Response) => {
   }
 }
 
-export {createAccount, getAccounts, transferMoney, getTransactionStatus, userLogOut, userLogin, checkBalance, insertBVN}
+const getTransactions = async (req: Request, res: Response) => {
+  try{
+    const {user} = req
+
+    if (!user)
+      return res.status(401).json({message: 'Unauthenticated'})
+
+    const transactions = await Transaction.find({ user: user.id })
+    const allTransactions = await Transaction.find()
+
+    if(user.hasAdminAccess)
+      return res.status(200).json({message: 'Transactions retrieved successfully', transactions: allTransactions})
+
+    return res.status(200).json({
+      message: 'Transactions retrieved successfully',
+      transactions
+    })
+  } catch(error) {
+    res.status(500).json({message: getErrorMessage(error)})
+  }
+}
+
+export {createAccount, getAccounts, transferMoney, getTransactionStatus, userLogOut, userLogin, checkBalance, insertBVN, getTransactions}
