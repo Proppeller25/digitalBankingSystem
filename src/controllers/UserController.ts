@@ -154,7 +154,7 @@ const userLogin = async (req: Request, res: Response) => {
 
     const existingUser = await User.findOne({ email })
     if (!existingUser) {
-      return res.status(401).json({ message: 'Invalid credentials' })
+      return res.status(404).json({ message: 'Invalid credentials' })
     }
 
     const isValidPassword = await bcrypt.compare(password, existingUser.password)
