@@ -63,15 +63,18 @@ export interface CreateAccountResponse {
   account?: {
     accountNumber: string
   }
+  message: string
 }
 
 export interface AccountEnquiryResponse {
   accountNumber?: string
   accountName?: string
+  message?: string
 }
 
 export interface AccountBalanceResponse {
   balance: number
+  message?: string
 }
 
 export interface TransferResponse {
@@ -83,17 +86,40 @@ export interface TransferResponse {
   currency?: string
   senderAccount: string
   receiverAccount: string
+  message?: string
 }
 
-export type ValidateBvnResponse = boolean | {
+export type ValidateBvnResponse = {
   valid?: boolean
   ok?: boolean
   message?: string
 }
 
-export type AccountsResponse = unknown
+export interface AccountResponse {
+  _id: string
+  accountNumber: string
+  accountName: string
+  bankCode: string
+  fintechId: string
+  kycType: string
+  kycID: string
+  balance: number
+  createdAt: string
+  updatedAt: string
+  [key: string]: unknown
+}
 
-const getToken = async () => {
+export interface AccountsResponse {
+  count: number
+  accounts: AccountResponse[]
+  message: string
+}
+
+let savedToken: string = '' 
+
+const getToken = async (force = false) => {
+  if (savedToken && !force) return savedToken
+
   try {
     const body = {
       apiKey: process.env.NIBSS_API_KEY,
@@ -109,21 +135,27 @@ const getToken = async () => {
       throw new Error('NIBSS token was missing from the response')
     }
 
-    return token
+    savedToken = token
+    return savedToken
   } catch (error) {
     throw getServiceError('token request', error)
   }
 }
 
+if (!savedToken) savedToken = await getToken()
+
 const insertBvn = async (payload: BvnPayload) => {
   try {
-    const token = await getToken()
+    const token = savedToken
     const response = await axios.post<InsertBvnResponse>(
       `${getBaseUrl()}/api/insertBvn`,
       payload,
       { headers: { Authorization: `Bearer ${token}` } }
     )
 
+    if(response.data.message === 'Invalid or expired token')
+      savedToken = await getToken(true)
+    
     return response.data
   } catch (error) {
     throw getServiceError('BVN insertion', error)
@@ -132,12 +164,15 @@ const insertBvn = async (payload: BvnPayload) => {
 
 const validateBvn = async (bvn: string): Promise<ValidateBvnResponse> => {
   try {
-    const token = await getToken()
+    const token = savedToken
     const response = await axios.post<ValidateBvnResponse>(
       `${getBaseUrl()}/api/validateBvn`,
       { bvn },
       { headers: { Authorization: `Bearer ${token}` } }
     )
+
+    if(response.data.message === 'Invalid or expired token')
+      savedToken = await getToken(true)
 
     return response.data
   } catch (error) {
@@ -147,12 +182,15 @@ const validateBvn = async (bvn: string): Promise<ValidateBvnResponse> => {
 
 const createNibssAccount = async (payload: CreateAccountPayload) => {
   try {
-    const token = await getToken()
+    const token = savedToken
     const response = await axios.post<CreateAccountResponse>(
       `${getBaseUrl()}/api/account/create`,
       payload,
       { headers: { Authorization: `Bearer ${token}` } }
     )
+
+    if(response.data.message === 'Invalid or expired token')
+      savedToken = await getToken(true)
 
     return response.data
   } catch (error) {
@@ -162,11 +200,14 @@ const createNibssAccount = async (payload: CreateAccountPayload) => {
 
 const accountEnquiry = async (accountNumber: string) => {
   try {
-    const token = await getToken()
+    const token = savedToken
     const response = await axios.get<AccountEnquiryResponse>(
       `${getBaseUrl()}/api/account/name-enquiry/${encodeURIComponent(accountNumber)}`,
       { headers: { Authorization: `Bearer ${token}` } }
     )
+
+    if(response.data.message === 'Invalid or expired token')
+      savedToken = await getToken(true)
 
     return response.data
   } catch (error) {
@@ -176,11 +217,14 @@ const accountEnquiry = async (accountNumber: string) => {
 
 const getAllAccounts = async (): Promise<AccountsResponse> => {
   try {
-    const token = await getToken()
+    const token = savedToken
     const response = await axios.get<AccountsResponse>(
       `${getBaseUrl()}/api/accounts`,
       { headers: { Authorization: `Bearer ${token}` } }
     )
+
+    if(response.data.message === 'Invalid or expired token')
+      savedToken = await getToken(true)
 
     return response.data
   } catch (error) {
@@ -190,11 +234,14 @@ const getAllAccounts = async (): Promise<AccountsResponse> => {
 
 const getAccountBalance = async (accountNumber: string) => {
   try {
-    const token = await getToken()
+    const token = savedToken
     const response = await axios.get<AccountBalanceResponse>(
       `${getBaseUrl()}/api/account/balance/${encodeURIComponent(accountNumber)}`,
       { headers: { Authorization: `Bearer ${token}` } }
     )
+
+    if(response.data.message === 'Invalid or expired token')
+      savedToken = await getToken(true)
 
     return response.data
   } catch (error) {
@@ -204,12 +251,15 @@ const getAccountBalance = async (accountNumber: string) => {
 
 const transfer = async (payload: TransferPayload) => {
   try {
-    const token = await getToken()
+    const token = savedToken
     const response = await axios.post<TransferResponse>(
       `${getBaseUrl()}/api/transfer`,
       payload,
       { headers: { Authorization: `Bearer ${token}` } }
     )
+
+    if(response.data.message === 'Invalid or expired token')
+      await getToken()
 
     return response.data
   } catch (error) {
@@ -219,11 +269,14 @@ const transfer = async (payload: TransferPayload) => {
 
 const getTransferStatus = async (transactionId: string) => {
   try {
-    const token = await getToken()
+    const token = savedToken
     const response = await axios.get<TransferResponse>(
       `${getBaseUrl()}/api/transaction/${encodeURIComponent(transactionId)}`,
       { headers: { Authorization: `Bearer ${token}` } }
     )
+
+    if(response.data.message === 'Invalid or expired token')
+      await getToken()
 
     return response.data
   } catch (error) {
