@@ -14,12 +14,7 @@ const getBaseUrl = () => {
 const getServiceError = (operation: string, error: unknown) => {
   if (axios.isAxiosError(error)) {
     const status = error.response?.status ?? 'network error'
-    const responseData = error.response?.data
-    const details = typeof responseData === 'string'
-      ? responseData
-      : responseData
-        ? JSON.stringify(responseData)
-        : error.message
+    const details = error.response?.data?.message ?? error.message
 
     return new Error(`NIBSS ${operation} failed (${status}): ${details}`, { cause: error })
   }
